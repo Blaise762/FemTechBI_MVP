@@ -13,19 +13,25 @@ This is a regionally focused, equity-centered FemTech Business Intelligence plat
 - Form capture functionality for dashboard access
 
 ### 2. Dashboard View
+- Data upload functionality supporting CSV and Excel files
 - State-by-state data visualization
-- Key metrics: maternal mortality rate, OB-GYN density, FemTech startups, population demographics
-- Interactive charts: bar charts, scatter plots
-- State-specific summaries
+- Key metrics: prenatal visits, birth rates, mother's age distribution
+- Interactive charts: line charts, bar charts, histograms
+- FemTech core metrics analysis with race-based comparisons
+- Dynamic data adaptation for different file formats
 
 ### 3. Gap & Opportunity Analysis
-- High-need, low-innovation county identification
-- Filters by state, demographic focus, and health condition
-- Visualization of need vs innovation scores
+- Placeholder page for future implementation
+- Planned features: high-need, low-innovation county identification
+- Expected data structure display
+- Integration with HRSA HPSA dataset (Phase 2)
 
-### 4. AI Insights (Placeholder)
-- Future-ready AI summary box
-- GPT-powered insights placeholder
+### 4. AI Insights
+- Interactive Q&A functionality for data exploration
+- Simulated AI responses based on uploaded data
+- Example queries for guidance
+- Data-driven insights extraction
+- Loading animations for better user experience
 
 ### 5. Download Center
 - PDF snapshot download
@@ -85,29 +91,72 @@ The app will be available at `http://localhost:8501`
 
 ## Data
 
-The MVP uses sample data for demonstration purposes. To replace with real data:
+The MVP uses a flexible data upload system for testing purposes. Users can upload their own CSV or Excel files for analysis.
 
-1. Update the `load_sample_data()` function in `app.py`
-2. Ensure data follows the same structure as the sample dataframes
+### Data Upload
+
+- Supports CSV and Excel file formats (.csv, .xlsx, .xls)
+- Flexible data structure adaptation
+- Automatic column detection for key metrics
+- For internal testing only – Production will auto-load CDC/HRSA data
+
+### Expected Data Structure
+
+For optimal analysis, uploaded data should contain:
+- State column (for state-level analysis)
+- Year column (for trend analysis)
+- Race/Single Race column (for demographic analysis)
+- Prenatal visits column (for prenatal care analysis)
+- Birth Rate column (for birth rate analysis)
+- Age of Mother column (for age distribution analysis)
 
 ## Form Integration
 
-The app uses an external form (Tally.so) for user registration. To update the form:
+The app uses an in-app form for user registration and dashboard access control.
 
-1. Create a new form at [tally.so](https://tally.so)
-2. Update the form link in the `app.py` file
-3. Configure the form to redirect back to your deployed app URL
+### Form Features
+
+- Required fields: Name and Email
+- Optional fields: Organization and Purpose
+- Form submission grants access to the dashboard
+- Session state management for access control
+
+### Access Control
+
+- Users must complete the form before accessing the dashboard
+- Form completion status is maintained in session state
+- Dashboard access is restricted until form is submitted
+
+## MVP Status
+
+This is a Minimum Viable Product (MVP) designed for demonstration and testing purposes.
+
+### Current Limitations
+
+- Data upload is for internal testing only – Production will auto-load CDC/HRSA data
+- AI Insights uses simulated responses – Real GPT integration coming in future updates
+- Gap & Opportunity Analysis is a placeholder – Full implementation in Phase 2
+- No persistent data storage – Data is lost when session ends
+- No user authentication – Form-based access control only
+
+### Testing Notes
+
+- The app accepts any CSV/Excel file format for flexibility during testing
+- Error handling is simplified for MVP – Production will have more robust validation
+- Some features are placeholders to demonstrate the intended user flow
 
 ## Future Enhancements
 
+- Gap & Opportunity Analysis with HRSA data integration (Phase 2)
+- Real AI-powered insights integration (GPT API)
+- Interactive map visualizations
+- Real-time data integration with CDC/HRSA APIs
 - Tiered subscription system
 - Custom insight generator
 - Sponsorship tier integration
 - Exportable pitch decks & reports
 - Regional founder directory
-- Interactive map visualizations
-- Real-time data integration
-- Advanced AI-powered insights
+- Advanced data validation and error handling
 
 ## License
 

@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from PIL import Image
 import base64
-import io
 
 # 页面配置
 st.set_page_config(
@@ -18,39 +16,77 @@ st.set_page_config(
 if 'form_completed' not in st.session_state:
     st.session_state.form_completed = False
 
-# 模拟数据 - 将在后续替换为真实数据
+# 页面导航状态
+if 'page' not in st.session_state:
+    st.session_state.page = 'Home'
+
+# 数据加载函数支持CSV/Excel文件上传
 @st.cache_data
-def load_sample_data():
-    # 模拟州级数据
-    state_data = pd.DataFrame({
-        "State": ["Georgia", "Florida", "Alabama", "Mississippi", "Louisiana", "South Carolina"],
-        "State Abbr": ["GA", "FL", "AL", "MS", "LA", "SC"],
-        "Maternal Mortality Rate": [30.8, 27.6, 47.9, 65.7, 45.9, 32.5],
-        "OB-GYN Density": [45.2, 52.1, 31.5, 28.9, 35.7, 41.3],
-        "FemTech Startups": [25, 32, 8, 5, 12, 15],
-        "Black Women Population %": [31.0, 16.9, 26.8, 37.8, 32.0, 27.6],
-        "Rural Population %": [25.1, 17.8, 41.3, 52.1, 44.0, 31.2]
-    })
+def load_data(uploaded_file, file_type):
+    try:
+        if file_type == 'csv':
+            return pd.read_csv(uploaded_file)
+        elif file_type == 'excel':
+            return pd.read_excel(uploaded_file)
+        else:
+            return pd.DataFrame()
+    except Exception as e:
+        st.sidebar.warning(f"⚠️ Error loading file: {e}")
+        return pd.DataFrame()
+
+# 侧边栏添加数据上传功能
+with st.sidebar.expander("📁 Upload Data", expanded=True):
+    st.markdown("Upload CSV or Excel files for custom data analysis")
+    st.markdown("*Note: Currently accepting any format for testing purposes*")
+    st.markdown("*For internal testing only – Production will auto-load CDC/HRSA data*")
     
-    # 模拟县级差距数据
-    county_data = pd.DataFrame({
-        "State": ["Georgia", "Georgia", "Florida", "Florida", "Alabama", "Alabama", "Mississippi", "Mississippi", "Louisiana", "Louisiana", "South Carolina", "South Carolina"],
-        "County": ["Fulton", "Rural County", "Miami-Dade", "Rural County", "Jefferson", "Rural County", "Hinds", "Rural County", "Orleans", "Rural County", "Charleston", "Rural County"],
-        "Need Score": [30, 85, 35, 75, 40, 90, 45, 95, 38, 88, 32, 80],
-        "Innovation Score": [90, 20, 85, 25, 70, 15, 65, 10, 75, 18, 80, 22]
-    })
-    
-    return state_data, county_data
+    # 数据文件上传
+    uploaded_file = st.file_uploader("Upload Data File", type=["csv", "xlsx", "xls"])
 
 # 加载数据
-state_data, county_data = load_sample_data()
+if uploaded_file:
+    # 确定文件类型
+    file_type = 'csv' if uploaded_file.name.endswith('.csv') else 'excel'
+    
+    # 加载上传的数据
+    uploaded_data = load_data(uploaded_file, file_type)
+    
+    if not uploaded_data.empty:
+        st.sidebar.success("✅ Data uploaded successfully!")
+        st.sidebar.write(f"📊 Uploaded file contains {len(uploaded_data)} rows and {len(uploaded_data.columns)} columns")
+        st.sidebar.write("Columns:", uploaded_data.columns.tolist())
+        
+        # 暂时使用上传的数据作为州级数据
+        state_data = uploaded_data
+        # 创建空的县级数据
+        county_data = pd.DataFrame()
+    else:
+        st.sidebar.warning("⚠️ Failed to load data. Please check your file format.")
+        state_data = pd.DataFrame()
+        county_data = pd.DataFrame()
+else:
+    # 未上传文件时的提示
+    state_data = pd.DataFrame()
+    county_data = pd.DataFrame()
+    st.sidebar.info("ℹ️ Please upload a data file to continue.")
 
 # 侧边栏导航
 st.sidebar.title("FemTech BI Dashboard")
-page = st.sidebar.radio(
+
+# 使用session_state管理页面导航
+page_options = ["Home", "Dashboard", "Gap & Opportunity", "AI Insights", "Download Center"]
+selected_page = st.sidebar.radio(
     "Navigation",
-    ["Home", "Dashboard", "Gap & Opportunity", "AI Insights", "Download Center"]
+    page_options,
+    index=page_options.index(st.session_state.page) if st.session_state.page in page_options else 0
 )
+
+# 更新session_state中的页面
+if selected_page != st.session_state.page:
+    st.session_state.page = selected_page
+
+# 使用session_state中的页面值
+page = st.session_state.page
 
 # 首页
 if page == "Home":
@@ -118,95 +154,255 @@ if page == "Home":
     if not st.session_state.form_completed:
         st.warning("Please complete the form below to access the full dashboard.")
         
-        # 外部表单链接
-        st.markdown("""
-        ### Required Form
-        Please complete this form before accessing the dashboard:
+        # 应用内表单
+        st.markdown("### Required Form")
+        st.write("Please complete this form to access the dashboard:")
         
-        [Complete Form Here](https://tally.so/r/n9Xv3r) - This link will open in a new tab
+        with st.form("access_form"):
+            name = st.text_input("Name")
+            email = st.text_input("Email")
+            organization = st.text_input("Organization")
+            purpose = st.text_area("What are you hoping to find?")
+            
+            submit_button = st.form_submit_button("Submit")
         
-        After submitting, return to this page and click the button below to confirm access.
-        """, unsafe_allow_html=True)
-        
-        if st.button("I've completed the form"):
-            st.session_state.form_completed = True
-            st.success("Thank you! You now have access to the dashboard.")
-            # 重定向到仪表板
-            st.session_state.page = "Dashboard"
+        if submit_button:
+            if name and email:
+                st.session_state.form_completed = True
+                st.success("Thank you! You now have access to the dashboard.")
+                # 重定向到仪表板
+                st.session_state.page = "Dashboard"
+            else:
+                st.error("Please fill in at least your name and email.")
     else:
         st.success("You have access to the dashboard. Click 'Explore the Dashboard' to begin.")
 
 # 仪表板视图
 elif page == "Dashboard":
     if st.session_state.form_completed:
-        st.title("State-by-State Dashboard")
-        
-        # 州选择器
-        selected_state = st.selectbox("Select a State", state_data["State"].unique())
-        
-        # 获取所选州的数据
-        state_info = state_data[state_data["State"] == selected_state].iloc[0]
-        
-        # 显示关键指标
-        st.subheader(f"Key Metrics for {selected_state}")
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Maternal Mortality Rate", f"{state_info['Maternal Mortality Rate']} per 100,000")
-        with col2:
-            st.metric("OB-GYN Density", f"{state_info['OB-GYN Density']} per 100,000")
-        with col3:
-            st.metric("FemTech Startups", state_info['FemTech Startups'])
-        with col4:
-            st.metric("Black Women Population", f"{state_info['Black Women Population %']}%")
-        
-        # 图表
-        st.subheader("Data Visualizations")
-        
-        # 1. 州际比较 - 孕产妇死亡率
-        fig1 = px.bar(
-            state_data, 
-            x="State", 
-            y="Maternal Mortality Rate",
-            title="Maternal Mortality Rate by State",
-            color="Maternal Mortality Rate",
-            color_continuous_scale="RdYlBu_r"
-        )
-        st.plotly_chart(fig1, use_container_width=True)
-        
-        # 2. 州际比较 - FemTech初创公司
-        fig2 = px.bar(
-            state_data, 
-            x="State", 
-            y="FemTech Startups",
-            title="FemTech Startup Presence by State",
-            color="FemTech Startups",
-            color_continuous_scale="Viridis"
-        )
-        st.plotly_chart(fig2, use_container_width=True)
-        
-        # 3. 农村人口与OB-GYN密度关系
-        fig3 = px.scatter(
-            state_data, 
-            x="Rural Population %", 
-            y="OB-GYN Density",
-            size="Maternal Mortality Rate",
-            color="State",
-            title="Rural Population vs OB-GYN Density",
-            hover_name="State"
-        )
-        st.plotly_chart(fig3, use_container_width=True)
-        
-        # 摘要框
-        st.subheader("State Summary")
-        st.info(f"""
-        **{selected_state} Overview:**
-        - Maternal mortality rate is {state_info['Maternal Mortality Rate']} per 100,000 births, which is {'above' if state_info['Maternal Mortality Rate'] > 30 else 'below'} the national average.
-        - OB-GYN density is {state_info['OB-GYN Density']} per 100,000 population, indicating {'adequate' if state_info['OB-GYN Density'] > 40 else 'limited'} access to reproductive healthcare.
-        - There are {state_info['FemTech Startups']} FemTech startups in the state, showing {'strong' if state_info['FemTech Startups'] > 15 else 'emerging'} innovation activity.
-        - Black women make up {state_info['Black Women Population %']}% of the population, highlighting the importance of equity-centered approaches.
-        - {state_info['Rural Population %']}% of the population lives in rural areas, where healthcare access is often more limited.
-        """)
+        if not state_data.empty:
+            st.title("Deep South FemTech Decision Center")
+            st.subheader("Layout 2.0 - Equity-Centered Insights")
+            
+            try:
+                # 检查数据结构
+                cols = state_data.columns.str.lower()
+                has_births = 'births' in cols
+                has_race = 'race' in cols or 'single race' in cols
+                has_year = 'year' in cols
+                has_prenatal = 'prenatal' in cols
+                has_birth_rate = any('birth rate' in col for col in cols)
+                has_mother_age = any('age of mother' in col for col in cols)
+                
+                # 找到相关列
+                state_columns = [col for col in state_data.columns if 'state' in col.lower()]
+                birth_col = [col for col in state_data.columns if 'birth' in col.lower() and not 'rate' in col.lower()][0] if has_births else None
+                prenatal_col = [col for col in state_data.columns if 'prenatal' in col.lower()][0] if has_prenatal else None
+                birth_rate_col = [col for col in state_data.columns if 'birth rate' in col.lower()][0] if has_birth_rate else None
+                mother_age_col = [col for col in state_data.columns if 'age of mother' in col.lower()][0] if has_mother_age else None
+                year_col = [col for col in state_data.columns if 'year' in col.lower()][0] if has_year else None
+                
+                # 第一区：KPI关键指标卡(Summary Cards)
+                st.subheader("🎯 Key Performance Indicators")
+                
+                # 创建三列布局
+                col1, col2, col3 = st.columns(3)
+                
+                # 卡片1：深南部总出生数
+                if birth_col:
+                    total_births = state_data[birth_col].sum()
+                    col1.metric(
+                        label="Total Births",
+                        value=f"{total_births:,.0f}",
+                        delta="Deep South Total",
+                        delta_color="normal"
+                    )
+                else:
+                    col1.metric(
+                        label="Total Births",
+                        value="N/A",
+                        delta="Data Not Available"
+                    )
+                
+                # 卡片2：平均产前检查次数
+                if prenatal_col:
+                    avg_prenatal = state_data[prenatal_col].mean()
+                    col2.metric(
+                        label="Avg Prenatal Visits",
+                        value=f"{avg_prenatal:.1f}",
+                        delta="Per Mother",
+                        delta_color="normal"
+                    )
+                else:
+                    col2.metric(
+                        label="Avg Prenatal Visits",
+                        value="N/A",
+                        delta="Data Not Available"
+                    )
+                
+                # 卡片3：缺口州数量
+                if state_columns:
+                    unique_states = state_data[state_columns[0]].nunique()
+                    col3.metric(
+                        label="States Covered",
+                        value=f"{unique_states}",
+                        delta="Deep South States",
+                        delta_color="normal"
+                    )
+                else:
+                    col3.metric(
+                        label="States Covered",
+                        value="N/A",
+                        delta="Data Not Available"
+                    )
+                
+                # 第二区和第三区：市场与规模 + 医疗公平性对比
+                st.subheader("📊 Market & Equity Analysis")
+                
+                # 创建两列布局
+                market_col, equity_col = st.columns(2)
+                
+                # 第二区：市场与规模(Market & Scale) - 中层左侧
+                with market_col:
+                    st.markdown("### 📈 Market & Scale")
+                    
+                    if state_columns and birth_col:
+                        # 按州计算出生数
+                        state_births = state_data.groupby(state_columns[0])[birth_col].sum().reset_index()
+                        
+                        # 创建饼图
+                        fig_market = px.pie(
+                            state_births,
+                            values=birth_col,
+                            names=state_columns[0],
+                            title="Births by State",
+                            color_discrete_sequence=["#FF7F50", "#B2AC88", "#FFA07A", "#C5D5CB"]
+                        )
+                        # 添加百分比标签
+                        fig_market.update_traces(textinfo='percent+label')
+                        # 调整为环形图
+                        fig_market.update_traces(hole=0.4)
+                        st.plotly_chart(fig_market, width='stretch')
+                    else:
+                        st.info("ℹ️ Market data not available. Please ensure your data contains State and Births columns.")
+                
+                # 第三区：医疗公平性对比(Equity Comparison) - 中层右侧
+                with equity_col:
+                    st.markdown("### ⚖️ Equity Comparison")
+                    
+                    if state_columns and (birth_rate_col or prenatal_col):
+                        # 选择要对比的指标
+                        metric_col = birth_rate_col if birth_rate_col else prenatal_col
+                        metric_name = "Birth Rate" if birth_rate_col else "Prenatal Visits"
+                        
+                        # 按州计算平均值
+                        state_metric = state_data.groupby(state_columns[0])[metric_col].mean().reset_index()
+                        
+                        # 创建柱状图
+                        fig_equity = px.bar(
+                            state_metric,
+                            x=state_columns[0],
+                            y=metric_col,
+                            title=f"{metric_name} by State",
+                            color_discrete_sequence=["#FF7F50", "#B2AC88", "#FFA07A", "#C5D5CB"],
+                            barmode='group'
+                        )
+                        fig_equity.update_layout(bargap=0.2)
+                        st.plotly_chart(fig_equity, width='stretch')
+                    else:
+                        st.info("ℹ️ Equity data not available. Please ensure your data contains State and Birth Rate or Prenatal Visits columns.")
+                
+                # 第四区：人群画像与趋势(Persons & Trends) - 底层布局
+                st.subheader("👥 Personas & Trends")
+                
+                # 创建两列布局
+                persona_col, trend_col = st.columns(2)
+                
+                # 左侧：母亲年龄分布[直方图]
+                with persona_col:
+                    st.markdown("### 📊 Mother's Age Distribution")
+                    
+                    if mother_age_col:
+                        # 计算平均年龄
+                        mean_age = state_data[mother_age_col].mean()
+                        
+                        # 创建直方图
+                        fig_age = px.histogram(
+                            state_data,
+                            x=mother_age_col,
+                            title="Age Distribution",
+                            labels={mother_age_col: "Age (years)"},
+                            color_discrete_sequence=["#FF7F50"],
+                            nbins=int(state_data[mother_age_col].max() - state_data[mother_age_col].min()) + 1,
+                            range_x=[state_data[mother_age_col].min() - 0.5, state_data[mother_age_col].max() + 0.5]
+                        )
+                        
+                        # 添加白色边框
+                        fig_age.update_traces(
+                            marker=dict(
+                                line=dict(
+                                    color='white',
+                                    width=1
+                                )
+                            )
+                        )
+                        
+                        # 添加平均年龄辅助线
+                        fig_age.add_vline(
+                            x=mean_age,
+                            line_dash="dash",
+                            line_color="#B2AC88",
+                            annotation_text=f"Mean: {mean_age:.1f}",
+                            annotation_position="top right"
+                        )
+                        
+                        # 优化坐标轴
+                        fig_age.update_layout(
+                            xaxis=dict(
+                                tickmode='linear',
+                                tick0=round(state_data[mother_age_col].min()),
+                                dtick=1,
+                                range=[round(state_data[mother_age_col].min()) - 0.5, round(state_data[mother_age_col].max()) + 0.5]
+                            )
+                        )
+                        st.plotly_chart(fig_age, width='stretch')
+                    else:
+                        st.info("ℹ️ Age data not available. Please ensure your data contains Mother's Age column.")
+                
+                # 右侧：健康改善趋势[折线图]
+                with trend_col:
+                    st.markdown("### 📉 Health Improvement Trends")
+                    
+                    if year_col and prenatal_col:
+                        # 按年份计算平均产前检查次数
+                        year_trend = state_data.groupby(year_col)[prenatal_col].mean().reset_index()
+                        
+                        # 创建折线图
+                        fig_trend = px.line(
+                            year_trend,
+                            x=year_col,
+                            y=prenatal_col,
+                            title="Prenatal Visits Over Time",
+                            labels={prenatal_col: "Avg. Visits", year_col: "Year"},
+                            color_discrete_sequence=["#B2AC88"]
+                        )
+                        # 添加标记点
+                        fig_trend.update_traces(mode='lines+markers', marker=dict(size=8))
+                        st.plotly_chart(fig_trend, width='stretch')
+                    else:
+                        st.info("ℹ️ Trend data not available. Please ensure your data contains Year and Prenatal Visits columns.")
+                
+                # 数据概览（可选）
+                with st.expander("📋 Data Overview"):
+                    st.write(f"Uploaded file contains {len(state_data)} rows and {len(state_data.columns)} columns")
+                    st.write("Sample Data:")
+                    st.dataframe(state_data.head())
+                    
+            except Exception as e:
+                st.warning(f"⚠️ Error analyzing data structure. Please ensure your data contains State, Year, Births columns and try again. Error: {e}")
+                st.info("ℹ️ Basic data view only available. Detailed analysis will be implemented once data structure is finalized.")
+        else:
+            st.info("ℹ️ No data available. Please upload a data file in the sidebar.")
     else:
         st.warning("Please complete the form on the Home page before accessing the dashboard.")
         if st.button("Go to Home page"):
@@ -215,87 +411,93 @@ elif page == "Dashboard":
 # 差距与机会层
 elif page == "Gap & Opportunity":
     st.title("Gap & Opportunity Analysis")
+    st.info("This section will display high-need, low-innovation counties using HRSA + Census + FemTech startup data.")
+    st.warning("⚠️ Data not yet loaded. Coming in Phase 2 after CDC data validation.")
     
-    # 过滤器
-    st.subheader("Filters")
-    col1, col2, col3 = st.columns(3)
+    # 显示占位示意图描述
+    st.subheader("Planned Features:")
+    st.markdown("""
+    - **High-need, low-innovation county identification**
+    - **Interactive filters** (State, race, age, health condition)
+    - **Opportunity zone visualization** on map
+    - **Detailed gap analysis** with actionable insights
+    """)
     
-    with col1:
-        selected_state_gap = st.selectbox("State", ["All"] + list(state_data["State"].unique()))
-    with col2:
-        selected_demographic = st.selectbox("Demographic Focus", ["All", "Black Women", "Rural Communities", "Urban Communities"])
-    with col3:
-        selected_health_condition = st.selectbox("Health Condition", ["All", "Maternal Health", "Reproductive Health", "Primary Care"])
+    # 显示示例数据结构
+    st.subheader("Expected Data Structure:")
+    sample_data = pd.DataFrame({
+        "County": ["Example County 1", "Example County 2", "Example County 3"],
+        "State": ["Georgia", "Alabama", "Mississippi"],
+        "Need Score": [85, 90, 95],
+        "Innovation Score": [20, 15, 10]
+    })
+    st.dataframe(sample_data)
     
-    # 筛选数据
-    filtered_county_data = county_data.copy()
-    if selected_state_gap != "All":
-        filtered_county_data = filtered_county_data[filtered_county_data["State"] == selected_state_gap]
-    
-    # 高需求低创新县分析
-    high_need_low_innovation = filtered_county_data[
-        (filtered_county_data["Need Score"] > 70) & (filtered_county_data["Innovation Score"] < 30)
-    ]
-    
-    # 显示结果
-    st.subheader("High-Need, Low-Innovation Areas")
-    
-    if not high_need_low_innovation.empty:
-        st.write(f"Found {len(high_need_low_innovation)} high-need, low-innovation counties:")
-        st.dataframe(high_need_low_innovation)
-    else:
-        st.info("No high-need, low-innovation counties found with current filters.")
-    
-    # 可视化
-    fig = px.scatter(
-        filtered_county_data, 
-        x="Innovation Score", 
-        y="Need Score",
-        color="State",
-        size=[30] * len(filtered_county_data),
-        hover_name="County",
-        title="Need vs Innovation Score by County",
-        labels={"Innovation Score": "Innovation Score (Higher = Better)", "Need Score": "Need Score (Higher = Greater Need)"}
-    )
-    
-    # 添加参考线
-    fig.add_shape(
-        type="line",
-        x0=30, y0=0,
-        x1=30, y1=100,
-        line=dict(color="Red", width=2, dash="dash")
-    )
-    
-    fig.add_shape(
-        type="line",
-        x0=0, y0=70,
-        x1=100, y1=70,
-        line=dict(color="Red", width=2, dash="dash")
-    )
-    
-    fig.add_annotation(
-        x=15, y=85,
-        text="Opportunity Zones",
-        showarrow=True,
-        arrowhead=2
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
+    st.info("Data integration with HRSA's HPSA dataset coming soon!")
 
 # AI洞察页面
 elif page == "AI Insights":
     st.title("AI-Powered Insights")
+    st.markdown("Ask a question about Deep South women's health data")
     
-    st.info("""
-    **Coming Soon: Smart Insight Generator!**
+    # Q&A框
+    user_query = st.text_input(
+        "e.g., 'Where is Black maternal mortality highest in Alabama?'", 
+        key="ai_query"
+    )
     
-    This feature will use GPT to generate data-driven insights and recommendations based on the dashboard data.
+    if user_query:
+        with st.spinner("Generating insight..."):
+            # 模拟AI响应
+            response = """
+            Based on CDC 2024 data, in Alabama, Black women have the highest maternal mortality rate (XX/100k), concentrated in counties like [X], [Y]. 
+            Key drivers include low prenatal visit rates (avg. """
+            
+            # 尝试从数据中获取一些真实值
+            try:
+                if not state_data.empty:
+                    # 检查是否有产前检查数据
+                    prenatal_cols = [col for col in state_data.columns if 'prenatal' in col.lower()]
+                    if prenatal_cols:
+                        avg_prenatal = state_data[prenatal_cols[0]].mean()
+                        response += f"{avg_prenatal:.1f}"
+                    else:
+                        response += "9.2"
+                else:
+                    response += "9.2"
+            except Exception:
+                response += "9.2"
+            
+            response += "\n\n**Recommended Action:** Increase funding for prenatal care programs in rural and underserved areas, with targeted outreach to Black and Indigenous women."
+            
+            st.info(response)
     
-    Example queries:
+    # 示例问题
+    st.subheader("Example Queries:")
+    st.markdown("""
     - "Where is Black maternal mortality highest in Alabama?"
     - "Which counties have the greatest need for FemTech innovation?"
     - "What are the top investment opportunities in the Deep South?"
+    - "How has prenatal care access changed over time across racial groups?"
     """)
+    
+    # 数据驱动洞察
+    if not state_data.empty:
+        st.subheader("📊 Data-Driven Insights")
+        
+        # 基本统计洞察
+        try:
+            # 找到数值列
+            numeric_cols = state_data.select_dtypes(include=['number']).columns.tolist()
+            if numeric_cols:
+                st.write("**Key Statistics from Uploaded Data:**")
+                for col in numeric_cols[:3]:  # 只显示前3个
+                    mean_val = state_data[col].mean()
+                    min_val = state_data[col].min()
+                    max_val = state_data[col].max()
+                    st.write(f"- {col}: Mean = {mean_val:.2f}, Range = {min_val:.2f} - {max_val:.2f}")
+        except Exception as e:
+            st.warning(f"⚠️ Could not generate data insights: {e}")
 
 # 下载中心
 elif page == "Download Center":
