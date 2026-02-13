@@ -312,16 +312,16 @@ def create_state_choropleth(df, metric_col='gap_score', title="Healthcare Gap Sc
             'gap_score': ':,.2f'
         }  # 鼠标悬浮显示的字段
     )
-    
+
     # 4. 美化地图样式
     fig.update_layout(
-        title_font=dict(size=16, weight="bold"),
+        title_font=dict(size=18, weight="bold"),
         coloraxis_colorbar=dict(
             title=metric_col.replace('_', ' ').title(),
             tickformat=',.2f'
         ),
-        height=500,
-        margin={"r":0,"t":50,"l":0,"b":0}
+        height=600,
+        margin={"r":0,"t":50,"l":0,"b":0},
     )
     
     # 5. 只显示Deep South 6州（聚焦目标区域）
@@ -405,7 +405,7 @@ with tabs[0]:
     st.subheader("Equity-Centered Insights for Women's Health Innovation")
     
     # Hero区域
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([1, 1])
     
     with col1:
         st.markdown("""
