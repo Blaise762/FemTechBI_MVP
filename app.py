@@ -45,55 +45,6 @@ def load_data(uploaded_file, file_type):
         st.sidebar.warning(f"⚠️ Error loading file: {e}")
         return pd.DataFrame()
 
-# 侧边栏添加数据上传功能
-with st.sidebar.expander("📁 Upload Data", expanded=True):
-    st.markdown("Upload CSV or Excel files for custom data analysis")
-    st.markdown("*Note: Currently accepting any format for testing purposes*")
-    st.markdown("*For internal testing only – Production will auto-load CDC/HRSA data*")
-    
-    # 双文件上传
-    cdc_file = st.file_uploader("Upload CDC Data File", type=["csv", "xlsx", "xls"])
-    hrsa_file = st.file_uploader("Upload HRSA Data File", type=["csv", "xlsx", "xls"])
-    
-    # 深南部6州过滤器
-    st.markdown("\n**Deep South States Filter**")
-    selected_states = st.multiselect(
-        "Select states to analyze",
-        options=["AL", "FL", "GA", "LA", "MS", "SC"],
-        default=["AL", "FL", "GA", "LA", "MS", "SC"]
-    )
-
-# 加载数据
-cdc_data = pd.DataFrame()
-hrsa_data = pd.DataFrame()
-merged_data = pd.DataFrame()
-
-# 加载CDC数据
-if cdc_file:
-    cdc_file_type = 'csv' if cdc_file.name.endswith('.csv') else 'excel'
-    cdc_data = load_data(cdc_file, cdc_file_type)
-    if not cdc_data.empty:
-        st.sidebar.success("✅ CDC Data uploaded successfully!")
-        st.sidebar.write(f"📊 CDC file: {len(cdc_data)} rows, {len(cdc_data.columns)} columns")
-    else:
-        st.sidebar.warning("⚠️ Failed to load CDC data. Please check your file format.")
-
-# 加载HRSA数据
-if hrsa_file:
-    hrsa_file_type = 'csv' if hrsa_file.name.endswith('.csv') else 'excel'
-    hrsa_data = load_data(hrsa_file, hrsa_file_type)
-    if not hrsa_data.empty:
-        st.sidebar.success("✅ HRSA Data uploaded successfully!")
-        st.sidebar.write(f"📊 HRSA file: {len(hrsa_data)} rows, {len(hrsa_data.columns)} columns")
-    else:
-        st.sidebar.warning("⚠️ Failed to load HRSA data. Please check your file format.")
-
-# 检查是否有数据
-if cdc_data.empty and hrsa_data.empty:
-    st.sidebar.info("ℹ️ Please upload both CDC and HRSA data files to continue.")
-else:
-    st.sidebar.info("ℹ️ Data ready for analysis.")
-
 # 州名映射字典：全称 -> 简称（仅深南部6州）
 STATE_MAPPING = {
     'Alabama': 'AL',
@@ -219,9 +170,70 @@ def clean_and_map_hrsa_data(df):
     
     return mapped_df
 
+# 侧边栏添加数据上传功能
+with st.sidebar.expander("📁 Upload Data", expanded=True):
+    st.markdown("Upload CSV or Excel files for custom data analysis")
+    st.markdown("*Note: Currently accepting any format for testing purposes*")
+    st.markdown("*For internal testing only – Production will auto-load CDC/HRSA data*")
+    
+    # 双文件上传
+    cdc_file = st.file_uploader("Upload CDC Data File", type=["csv", "xlsx", "xls"])
+    hrsa_file = st.file_uploader("Upload HRSA Data File", type=["csv", "xlsx", "xls"])
+
+# 加载数据
+cdc_data = pd.DataFrame()
+hrsa_data = pd.DataFrame()
+merged_data = pd.DataFrame()
+mapped_cdc = pd.DataFrame()
+mapped_hrsa = pd.DataFrame()
+
+# 加载CDC数据
+if cdc_file:
+    cdc_file_type = 'csv' if cdc_file.name.endswith('.csv') else 'excel'
+    cdc_data = load_data(cdc_file, cdc_file_type)
+
+# 加载HRSA数据
+if hrsa_file:
+    hrsa_file_type = 'csv' if hrsa_file.name.endswith('.csv') else 'excel'
+    hrsa_data = load_data(hrsa_file, hrsa_file_type)
+
 # 清理并映射数据
 mapped_cdc = clean_and_map_cdc_data(cdc_data)
 mapped_hrsa = clean_and_map_hrsa_data(hrsa_data)
+
+# 侧边栏添加过滤器
+with st.sidebar.expander("🔍 Filters", expanded=True):
+    # 深南部6州过滤器
+    st.markdown("**Deep South States Filter**")
+    selected_states = st.multiselect(
+        "Select states to analyze",
+        options=["AL", "FL", "GA", "LA", "MS", "SC"],
+        default=["AL", "FL", "GA", "LA", "MS", "SC"]
+    )
+
+    # 年份筛选框
+    st.markdown("\n**Year Filter**")
+    # 从映射后的CDC数据中获取年份
+    years = []
+    if not mapped_cdc.empty and 'year' in mapped_cdc.columns:
+        # 确保year列是数值类型
+        mapped_cdc['year'] = pd.to_numeric(mapped_cdc['year'], errors='coerce')
+        # 去重并排序
+        years = sorted(mapped_cdc['year'].dropna().unique())
+        # 过滤掉非数值
+        years = [int(year) for year in years if isinstance(year, (int, float)) and not np.isnan(year)]
+    
+    if years:
+        selected_years = st.multiselect(
+            "Select years to analyze",
+            options=years,
+            default=years
+        )
+    else:
+        selected_years = []
+        st.info("ℹ️ No year data available in CDC file.")
+
+
 
 # 执行数据关联
 def merge_data(cdc_df, hrsa_df):
@@ -265,6 +277,61 @@ def merge_data(cdc_df, hrsa_df):
     
     return merged
 
+# 新增：地图绘制辅助函数
+def create_state_choropleth(df, metric_col='gap_score', title="Healthcare Gap Score by State"):
+    """创建Deep South 6州的交互式分级着色地图
+    
+    参数:
+    df: 合并后的数据集 (merged_data)
+    metric_col: 用于着色的指标列 (gap_score/total_births/opportunity_index)
+    title: 地图标题
+    """
+    if df.empty or metric_col not in df.columns:
+        return None
+    
+    # 1. 聚合州级数据（确保每个州只有一条记录）
+    state_map_data = df.groupby('state').agg({
+        metric_col: 'mean',
+        'total_births': 'sum',
+        'gap_score': 'mean'
+    }).reset_index()
+    
+    # 2. 绘制美国州级地图（使用Plotly内置数据）
+    fig = px.choropleth(
+        state_map_data,
+        locations='state',  # 州简称
+        locationmode="USA-states",  # 使用美国州模式
+        color=metric_col,
+        color_continuous_scale=["#B2AC88", "#FF7F50", "#FF4500"],  # 暖色调适配现有风格
+        scope="usa",  # 限定地图范围为美国本土
+        title=title,
+        hover_data={
+            'state': True,
+            metric_col: ':,.2f',
+            'total_births': ':,.0f',
+            'gap_score': ':,.2f'
+        }  # 鼠标悬浮显示的字段
+    )
+    
+    # 4. 美化地图样式
+    fig.update_layout(
+        title_font=dict(size=16, weight="bold"),
+        coloraxis_colorbar=dict(
+            title=metric_col.replace('_', ' ').title(),
+            tickformat=',.2f'
+        ),
+        height=500,
+        margin={"r":0,"t":50,"l":0,"b":0}
+    )
+    
+    # 5. 只显示Deep South 6州（聚焦目标区域）
+    fig.update_geos(
+        fitbounds="locations",  # 自动适配选中的州
+        visible=False
+    )
+    
+    return fig
+
 # 执行数据关联
 merged_data = merge_data(mapped_cdc, mapped_hrsa)
 
@@ -272,31 +339,68 @@ merged_data = merge_data(mapped_cdc, mapped_hrsa)
 if not merged_data.empty and selected_states:
     merged_data = merged_data[merged_data['state'].isin(selected_states)]
 
+# 应用年份过滤器
+if not merged_data.empty and selected_years:
+    merged_data = merged_data[merged_data['year'].isin(selected_years)]
+
 # 暂时使用数据变量
 state_data = mapped_cdc  # 暂时使用映射后的CDC数据作为州级数据
 
 
-# 侧边栏导航
-st.sidebar.title("FemTech BI Dashboard")
+# 顶部标签页导航
+# 添加自定义CSS来美化标签页
+st.markdown('''
+<style>
+.stTabs {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: white;
+    margin-bottom: 20px;
+}
 
-# 使用session_state管理页面导航
-page_options = ["Home", "Dashboard", "Gap & Opportunity", "AI Insights", "Download Center"]
-selected_page = st.sidebar.radio(
-    "Navigation",
-    page_options,
-    index=page_options.index(st.session_state.page) if st.session_state.page in page_options else 0
-)
+.stTabs [data-baseweb="tab-list"] {
+    display: flex;
+    justify-content: space-between;
+    gap: 0;
+    padding: 0;
+    margin: 0;
+}
 
-# 更新session_state中的页面
-if selected_page != st.session_state.page:
-    st.session_state.page = selected_page
-    st.rerun()
+.stTabs [data-baseweb="tab"] {
+    font-size: 18px;
+    font-weight: bold;
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    margin: 0;
+    transition: all 0.3s ease;
+    border-radius: 0;
+}
 
-# 使用session_state中的页面值
-page = st.session_state.page
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    background-color: #FF7F50;
+    color: white;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    background-color: #FFA07A;
+    color: white;
+}
+</style>
+''', unsafe_allow_html=True)
+
+# 管理标签页状态
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0
+
+# 创建标签页
+st.title("FemTech BI Dashboard")
+tab_titles = ["🏠 Home", "📊 Dashboard", "🎯 Gap & Opportunity", "🤖 AI Insights", "💾 Download Center"]
+tabs = st.tabs(tab_titles)
 
 # 首页
-if page == "Home":
+with tabs[0]:
     st.title("FemTech BI Dashboard - Deep South")
     st.subheader("Equity-Centered Insights for Women's Health Innovation")
     
@@ -314,45 +418,33 @@ if page == "Home":
         - **Systems** (health orgs, policymakers, accelerators)
         """)
         
-        # CTA按钮
-        st.markdown("""
-        <style>
-        .stButton > button {
-            width: 200px;
-            margin: 5px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        col_cta1, col_cta2, col_cta3 = st.columns(3)
-        with col_cta1:
-            if st.button("Explore the Dashboard"):
-                if st.session_state.form_completed:
-                    st.session_state.page = "Dashboard"
-                    st.rerun()
-                else:
-                    st.warning("Please complete the form before accessing the dashboard.")
-        with col_cta2:
-            if st.button("Download Snapshot"):
-                st.session_state.page = "Download Center"
-                st.rerun()
-        with col_cta3:
-            if st.button("Request Custom Insights"):
-                st.session_state.page = "Download Center"
-                st.rerun()
+
     
     with col2:
         st.markdown("### Deep South States")
-        # 显示六个州的列表和地图描述
-        st.markdown("""
-        - Georgia (GA)
-        - Florida (FL)
-        - Alabama (AL)
-        - Mississippi (MS)
-        - Louisiana (LA)
-        - South Carolina (SC)
-        """)
-        st.info("Interactive map visualization coming soon!")
+        # 替换原有静态列表 + 提示 → 嵌入交互式地图
+        if not merged_data.empty:
+            # 绘制Gap Score地图
+            map_fig = create_state_choropleth(
+                merged_data,
+                metric_col='gap_score',
+                title="Healthcare Gap Score (HPSA) - Deep South States"
+            )
+            if map_fig:
+                st.plotly_chart(map_fig, width='stretch')
+            else:
+                st.info("📊 Map data unavailable. Please ensure merged data contains gap_score.")
+        else:
+            # 无数据时显示静态信息 + 提示
+            st.markdown("""
+            - Georgia (GA)
+            - Florida (FL)
+            - Alabama (AL)
+            - Mississippi (MS)
+            - Louisiana (LA)
+            - South Carolina (SC)
+            """)
+            st.info("📁 Upload CDC and HRSA data files to see interactive map visualization.")
     
     # 表单捕获功能
     st.markdown("""
@@ -382,13 +474,14 @@ if page == "Home":
                 st.success("Thank you! You now have access to the dashboard.")
                 # 重定向到仪表板
                 st.session_state.page = "Dashboard"
+                st.rerun()
             else:
                 st.error("Please fill in at least your name and email.")
     else:
         st.success("You have access to the dashboard. Click 'Explore the Dashboard' to begin.")
 
 # 仪表板视图
-elif page == "Dashboard":
+with tabs[1]:
     if st.session_state.form_completed:
         if not merged_data.empty:
             st.title("Deep South FemTech Decision Center")
@@ -553,7 +646,7 @@ elif page == "Dashboard":
                             fig_age.add_vline(x=mean_age, line_dash="dash", line_color="red", annotation_text=f"Mean: {mean_age:.2f}")
                             # 调整布局
                             fig_age.update_layout(bargap=0.1)
-                            st.plotly_chart(fig_age, use_container_width=True)
+                            st.plotly_chart(fig_age, width='stretch')
                         else:
                             st.info("ℹ️ No valid age data available. Please ensure your CDC data contains non-zero age values.")
                     else:
@@ -592,7 +685,7 @@ elif page == "Dashboard":
                                 )
                                 # 添加标记点
                                 fig_trend.update_traces(mode='lines+markers', marker=dict(size=8))
-                                st.plotly_chart(fig_trend, use_container_width=True)
+                                st.plotly_chart(fig_trend, width='stretch')
                             else:
                                 st.info("ℹ️ Trend data unavailable.")
                         else:
@@ -618,7 +711,7 @@ elif page == "Dashboard":
             st.rerun()
 
 # 差距与机会层
-elif page == "Gap & Opportunity":
+with tabs[2]:
     st.title("Gap & Opportunity Analysis")
     
     if not merged_data.empty:
@@ -756,7 +849,7 @@ elif page == "Gap & Opportunity":
         st.info("ℹ️ No merged data available. Please upload both CDC and HRSA data files in the sidebar.")
 
 # AI洞察页面
-elif page == "AI Insights":
+with tabs[3]:
     st.title("AI-Powered Insights")
     st.markdown("Ask a question about Deep South women's health data")
     
@@ -768,58 +861,102 @@ elif page == "AI Insights":
     
     if user_query:
         with st.spinner("Generating insight..."):
-            # 基于实际数据生成响应
+            # 基于实际数据生成动态响应
             response = ""
             
             # 尝试从合并数据中获取真实值
             try:
                 if not merged_data.empty:
-                    # 查找HPSA Score最高且Births最大的州
+                    # 构建数据摘要
+                    data_summary = ""
+                    
+                    # 1. 基本数据概览
+                    data_summary += f"Merged dataset contains {len(merged_data)} records across {merged_data['state'].nunique()} states.\n"
+                    
+                    # 2. 核心指标分析
                     if 'gap_score' in merged_data.columns and 'total_births' in merged_data.columns:
-                        # 计算综合得分（HPSA Score * Births）
-                        merged_data['composite_score'] = merged_data['gap_score'] * merged_data['total_births']
+                        # 使用临时变量计算综合得分
+                        composite_score = merged_data['gap_score'] * merged_data['total_births']
                         
                         # 按州计算平均综合得分
-                        state_scores = merged_data.groupby('state')['composite_score'].mean().reset_index()
+                        state_scores = composite_score.groupby(merged_data['state']).mean().reset_index()
+                        state_scores.columns = ['state', 'composite_score']
                         # 找到综合得分最高的州
                         top_state = state_scores.nlargest(1, 'composite_score').iloc[0]
                         
                         # 获取该州的详细数据
                         state_data = merged_data[merged_data['state'] == top_state['state']].iloc[0]
                         
-                        # 构建响应
-                        response = f"""
-                        Based on the latest CDC and HRSA data, the state with the most significant healthcare gap is {top_state['state']}.
+                        data_summary += f"Top opportunity state: {top_state['state']} with composite score of {top_state['composite_score']:.2f}.\n"
+                        data_summary += f"HPSA Score: {state_data['gap_score']:.2f}, Total Births: {state_data['total_births']:,.0f}.\n"
+                    
+                    # 3. 种族维度分析（如果存在race列）
+                    if 'race' in merged_data.columns:
+                        race_counts = merged_data['race'].value_counts()
+                        data_summary += f"\nRace distribution: {race_counts.to_dict()}.\n"
                         
-                        **Key Insights:**
-                        - HPSA Score: {state_data['gap_score']:.2f} (higher scores indicate greater need)
-                        - Total Births: {state_data['total_births']:,.0f} (represents market size)
-                        
-                        **Recommended Action:** In {top_state['state']}, healthcare gap is most significant. We recommend prioritizing FemTech innovation and investment in this state, with targeted programs to improve prenatal care access and maternal health outcomes.
-                        """
-                    else:
-                        response = """
-                        Based on available data, we can provide insights about women's health in the Deep South.
-                        
-                        **Recommended Action:** Increase funding for prenatal care programs in rural and underserved areas, with targeted outreach to Black and Indigenous women.
-                        """
+                        # 按种族聚合分析
+                        if 'total_births' in merged_data.columns:
+                            race_births = merged_data.groupby('race')['total_births'].sum().reset_index()
+                            data_summary += f"Births by race: {dict(zip(race_births['race'], race_births['total_births']))}.\n"
+                    
+                    # 4. 生成动态洞察
+                    # 确保top_state变量存在
+                    top_state_info = ""
+                    top_state_name = ""
+                    if 'top_state' in locals():
+                        top_state_name = top_state['state']
+                        top_state_info = f"- The state with the most significant healthcare gap is {top_state_name}, presenting a prime opportunity for FemTech innovation\n"
+                    
+                    response = f"""
+                    ## AI-Generated Insight
+                    
+                    Based on the analysis of your uploaded data, here are key insights:
+                    
+                    **Data Summary:**
+                    {data_summary}
+                    
+                    **Key Opportunities:**
+                    {top_state_info}
+                    - Targeted interventions should focus on areas with high HPSA scores and substantial birth rates
+                    {"- Race-based disparities exist, with potential for targeted outreach programs" if 'race' in merged_data.columns else ""}
+                    
+                    **Recommended Actions:**
+                    {f"1. Prioritize investment in {top_state_name} with programs addressing maternal health equity\n" if top_state_name else "1. Identify states with highest healthcare gaps for targeted investment\n"}
+                    2. Develop data-driven strategies to improve healthcare access in underserved areas
+                    3. Consider racial and ethnic disparities when designing intervention programs
+                    4. Establish partnerships with local healthcare providers to maximize impact
+                    
+                    *This insight was generated based on your actual data. For more detailed analysis, consider integrating with OpenAI API.*
+                    """
                 else:
                     response = """
-                    Based on CDC 2024 data, in Alabama, Black women have the highest maternal mortality rate (XX/100k), concentrated in counties like [X], [Y]. 
-                    Key drivers include low prenatal visit rates (avg. 9.2)
+                    ## Data Availability Notice
                     
-                    **Recommended Action:** Increase funding for prenatal care programs in rural and underserved areas, with targeted outreach to Black and Indigenous women.
+                    No merged data is currently available for analysis. Please upload both CDC and HRSA data files to generate meaningful insights.
+                    
+                    Once data is uploaded, this system will automatically:
+                    1. Analyze healthcare gaps across Deep South states
+                    2. Identify top opportunity areas based on HPSA scores and birth rates
+                    3. Generate race-specific insights (if race data is available)
+                    4. Provide targeted investment recommendations
                     """
             except Exception as e:
                 response = f"""
-                Based on available data, we can provide insights about women's health in the Deep South.
+                ## Analysis Error
                 
-                **Note:** Error analyzing data: {e}
+                An error occurred while analyzing your data: {e}
                 
-                **Recommended Action:** Increase funding for prenatal care programs in rural and underserved areas, with targeted outreach to Black and Indigenous women.
+                Please ensure your data files contain the necessary columns (state, births, HPSA score) and try again.
+                
+                For optimal results, upload:
+                - CDC data with birth statistics by state and year
+                - HRSA data with HPSA scores by state
+                - Include race data for more comprehensive insights
                 """
             
-            st.info(response)
+            # 使用markdown显示，支持更好的格式渲染
+            st.markdown(response)
     
     # 示例问题
     st.subheader("Example Queries:")
@@ -845,6 +982,21 @@ elif page == "AI Insights":
                     min_val = merged_data[col].min()
                     max_val = merged_data[col].max()
                     st.write(f"- {col}: Mean = {mean_val:.2f}, Range = {min_val:.2f} - {max_val:.2f}")
+            
+            # 种族维度分析（如果存在race列）
+            if 'race' in merged_data.columns:
+                st.subheader("👥 Racial Dimensions")
+                race_counts = merged_data['race'].value_counts()
+                st.write("**Race Distribution:**")
+                for race, count in race_counts.items():
+                    st.write(f"- {race}: {count} records")
+                
+                # 按种族分析核心指标
+                if 'total_births' in merged_data.columns:
+                    race_births = merged_data.groupby('race')['total_births'].sum().reset_index()
+                    st.write("**Total Births by Race:**")
+                    for _, row in race_births.iterrows():
+                        st.write(f"- {row['race']}: {row['total_births']:,.0f}")
             
             # 添加基于数据的洞察
             st.subheader("🎯 Key Opportunities")
@@ -872,7 +1024,7 @@ elif page == "AI Insights":
         st.info("ℹ️ No merged data available. Please upload both CDC and HRSA data files to generate insights.")
 
 # 下载中心
-elif page == "Download Center":
+with tabs[4]:
     st.title("Download Center")
     
     st.subheader("Deep South FemTech Snapshot")
