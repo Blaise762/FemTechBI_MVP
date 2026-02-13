@@ -449,7 +449,6 @@ with tabs[0]:
     # 表单捕获功能
     st.markdown("""
     ---
-    ### Access the Dashboard
     """
     )
     
