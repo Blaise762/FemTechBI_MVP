@@ -403,6 +403,7 @@ tabs = st.tabs(tab_titles)
 with tabs[0]:
     st.title("FemTech BI Dashboard - Deep South")
     st.subheader("Equity-Centered Insights for Women's Health Innovation")
+    st.info("📅 **Data Note:** Dataset currently runs through 2024.")
     
     # Hero区域
     col1, col2 = st.columns([1, 1])
@@ -485,6 +486,7 @@ with tabs[1]:
         if not merged_data.empty:
             st.title("Deep South FemTech Decision Center")
             st.subheader("Layout 2.0 - Equity-Centered Insights")
+            st.info("📅 **Data Note:** Dataset currently runs through 2024.")
             
             try:
                 # 第一区：KPI关键指标卡(Summary Cards)
@@ -712,6 +714,7 @@ with tabs[1]:
 # 差距与机会层
 with tabs[2]:
     st.title("Gap & Opportunity Analysis")
+    st.info("📅 **Data Note:** Dataset currently runs through 2024.")
     
     if not merged_data.empty:
         # 计算Opportunity指数
@@ -728,10 +731,49 @@ with tabs[2]:
             # 用聚合后的指标重新计算州级机会指数
             state_aggregated['opportunity_index'] = (state_aggregated['total_births'] / max_births) * state_aggregated['gap_score']
             
+            # 添加分类标签
+            def classify_state(row, median_births, median_gap):
+                if row['total_births'] >= median_births and row['gap_score'] >= median_gap:
+                    return "High Need + High Market"
+                elif row['total_births'] < median_births and row['gap_score'] >= median_gap:
+                    return "High Need + Low Resources"
+                elif row['total_births'] >= median_births and row['gap_score'] < median_gap:
+                    return "Emerging Opportunity"
+                else:
+                    return "Stable Market"
+            
+            median_births = state_aggregated['total_births'].median()
+            median_gap = state_aggregated['gap_score'].median()
+            state_aggregated['category'] = state_aggregated.apply(classify_state, axis=1, median_births=median_births, median_gap=median_gap)
+            
             # 显示机会指数最高的前10个州
-            top_opportunities = state_aggregated.nlargest(10, 'opportunity_index')[['state', 'total_births', 'gap_score', 'opportunity_index']]
+            top_opportunities = state_aggregated.nlargest(10, 'opportunity_index')[['state', 'category', 'total_births', 'gap_score', 'opportunity_index']]
             
             st.subheader("🎯 Top Opportunity Zones")
+            
+            # 显示Top 3 Priority Regions
+            st.markdown("### ⭐ Top 3 Priority Regions")
+            top3 = state_aggregated.nlargest(3, 'opportunity_index')
+            for i, row in top3.iterrows():
+                st.markdown(f"""
+                <div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin: 10px 0; border-left: 5px solid #FF7F50;">
+                    <h4>#{i+1} {row['state']} - {row['category']}</h4>
+                    <p><strong>Total Births:</strong> {row['total_births']:,.0f} | <strong>Gap Score:</strong> {row['gap_score']:.2f} | <strong>Opportunity Index:</strong> {row['opportunity_index']:.2f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with st.expander("ℹ️ How Opportunity Index is Calculated", expanded=False):
+                st.write("**Opportunity Index Formula:**")
+                st.code("Opportunity Index = (State_Total_Births / Max_State_Births) × State_Average_HPSA_Score")
+                st.write("**What it means:**")
+                st.write("- **State_Total_Births**: Total number of births in the state (market size)")
+                st.write("- **Max_State_Births**: Highest birth count among all states (for normalization)")
+                st.write("- **State_Average_HPSA_Score**: Healthcare Professional Shortage Area score (need severity)")
+                st.write("**Why this matters:**")
+                st.write("- Combines market size (births) with need severity (HPSA score)")
+                st.write("- Identifies regions with both high demand and significant healthcare gaps")
+                st.write("- Perfect for founders and investors seeking high-impact opportunities")
+            
             st.dataframe(top_opportunities.style.format({
                 'total_births': '{:,.0f}',
                 'gap_score': '{:.2f}',
@@ -849,8 +891,9 @@ with tabs[2]:
 
 # AI洞察页面
 with tabs[3]:
-    st.title("AI-Powered Insights")
+    st.title("AI-Powered Insights (Beta)")
     st.markdown("Ask a question about Deep South women's health data")
+    st.info("💡 **Note:** This AI Insights feature is in preview. Full GPT integration coming soon!")
     
     # Q&A框
     user_query = st.text_input(
@@ -915,16 +958,31 @@ with tabs[3]:
                     **Data Summary:**
                     {data_summary}
                     
-                    **Key Opportunities:**
+                    **What This Trend Means:**
                     {top_state_info}
-                    - Targeted interventions should focus on areas with high HPSA scores and substantial birth rates
-                    {"- Race-based disparities exist, with potential for targeted outreach programs" if 'race' in merged_data.columns else ""}
+                    - The data reveals significant variation in healthcare access across Deep South states, with some regions facing far greater challenges than others
+                    - High HPSA scores combined with substantial birth volumes indicate clear market demand paired with unmet healthcare needs
                     
-                    **Recommended Actions:**
-                    {f"1. Prioritize investment in {top_state_name} with programs addressing maternal health equity\n" if top_state_name else "1. Identify states with highest healthcare gaps for targeted investment\n"}
-                    2. Develop data-driven strategies to improve healthcare access in underserved areas
-                    3. Consider racial and ethnic disparities when designing intervention programs
-                    4. Establish partnerships with local healthcare providers to maximize impact
+                    **Why This Matters:**
+                    - Regions with both high need and large market size represent the most compelling opportunities for impact and business success
+                    - Addressing these gaps can significantly improve maternal health outcomes while building sustainable FemTech businesses
+                    - The Deep South region presents unique opportunities for targeted innovation that can serve as national models
+                    
+                    **Who Should Act & How:**
+                    - **Founders**: Prioritize {top_state_name if top_state_name else 'high-opportunity states'} for launching maternal health solutions, focusing on accessibility and cultural relevance
+                    - **Investors**: Allocate capital to solutions targeting these high-need, high-potential regions for maximum impact and ROI
+                    - **Healthcare Systems**: Partner with local communities and tech innovators to implement scalable solutions
+                    - **Policymakers**: Use this data to inform resource allocation and policy decisions
+                    
+                    **Key Opportunities:**
+                    - Targeted interventions should focus on areas with high HPSA scores and substantial birth rates
+                    {"- Race-based disparities exist, with potential for culturally competent targeted outreach programs" if 'race' in merged_data.columns else ""}
+                    
+                    **Immediate Next Steps:**
+                    {f"1. **Founders**: Conduct on-the-ground research in {top_state_name} to understand specific community needs\n" if top_state_name else "1. **Founders**: Conduct on-the-ground research in top opportunity states to understand specific community needs\n"}
+                    2. **Investors**: Map the existing FemTech ecosystem in these regions to identify gaps
+                    3. **Healthcare Systems**: Pilot telehealth solutions to improve access in rural areas
+                    4. **All Stakeholders**: Establish partnerships with local community organizations to ensure solutions are rooted in local needs
                     
                     *This insight was generated based on your actual data. For more detailed analysis, consider integrating with OpenAI API.*
                     """
@@ -1026,19 +1084,13 @@ with tabs[3]:
 with tabs[4]:
     st.title("Download Center")
     
+    st.info("📅 **Data Note:** Dataset currently runs through 2024.")
+    
     st.subheader("Deep South FemTech Snapshot")
     st.write("Download our comprehensive snapshot of FemTech innovation and health equity in the Deep South.")
     
-    # 模拟PDF下载
-    def create_download_link(val, filename):
-        b64 = base64.b64encode(val).decode()  # val is bytes
-        return f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">Download {filename}</a>'
-    
-    # 创建模拟PDF内容
-    pdf_content = b"Simulated PDF content for Deep South FemTech Snapshot"
-    
-    # 添加下载按钮
-    st.markdown(create_download_link(pdf_content, "Deep_South_FemTech_Snapshot.pdf"), unsafe_allow_html=True)
+    # 标记为Coming Soon
+    st.warning("🚧 **Coming Soon:** Deep South FemTech Snapshot PDF download will be available in a future update.")
     
     # 添加整合后的CSV文件下载
     st.subheader("📊 Merged Data Download")
