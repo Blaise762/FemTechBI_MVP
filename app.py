@@ -4,6 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import base64
 import numpy as np
+import os
+import pickle
 
 # 页面配置
 st.set_page_config(
@@ -75,6 +77,55 @@ def standardize_state_name(state_name):
     
     # 如果无法映射，返回原始值
     return state_str
+
+# 数据预存储相关函数
+DATA_DIR = "preloaded_data"
+
+def ensure_data_dir():
+    """确保数据目录存在"""
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
+
+def save_preloaded_data(cdc_df, hrsa_df):
+    """保存预加载的数据到文件"""
+    ensure_data_dir()
+    try:
+        with open(os.path.join(DATA_DIR, "cdc_data.pkl"), "wb") as f:
+            pickle.dump(cdc_df, f)
+        with open(os.path.join(DATA_DIR, "hrsa_data.pkl"), "wb") as f:
+            pickle.dump(hrsa_df, f)
+        return True, "数据保存成功！"
+    except Exception as e:
+        return False, f"保存数据失败: {e}"
+
+def load_preloaded_data():
+    """从文件加载预存储的数据"""
+    ensure_data_dir()
+    cdc_df = pd.DataFrame()
+    hrsa_df = pd.DataFrame()
+    
+    try:
+        cdc_path = os.path.join(DATA_DIR, "cdc_data.pkl")
+        hrsa_path = os.path.join(DATA_DIR, "hrsa_data.pkl")
+        
+        if os.path.exists(cdc_path):
+            with open(cdc_path, "rb") as f:
+                cdc_df = pickle.load(f)
+        
+        if os.path.exists(hrsa_path):
+            with open(hrsa_path, "rb") as f:
+                hrsa_df = pickle.load(f)
+        
+        return cdc_df, hrsa_df, True
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame(), False
+
+def has_preloaded_data():
+    """检查是否存在预存储的数据"""
+    ensure_data_dir()
+    cdc_exists = os.path.exists(os.path.join(DATA_DIR, "cdc_data.pkl"))
+    hrsa_exists = os.path.exists(os.path.join(DATA_DIR, "hrsa_data.pkl"))
+    return cdc_exists and hrsa_exists
 
 # 辅助函数：将值转换为数值类型
 def to_numeric(value):
@@ -170,6 +221,9 @@ def clean_and_map_hrsa_data(df):
     
     return mapped_df
 
+# 检查是否有预存数据
+has_saved_data = has_preloaded_data()
+
 # 侧边栏添加数据上传功能
 with st.sidebar.expander("📁 Upload Data", expanded=True):
     st.markdown("Upload CSV or Excel files for custom data analysis")
@@ -177,8 +231,12 @@ with st.sidebar.expander("📁 Upload Data", expanded=True):
     st.markdown("*For internal testing only – Production will auto-load CDC/HRSA data*")
     
     # 双文件上传
-    cdc_file = st.file_uploader("Upload CDC Data File", type=["csv", "xlsx", "xls"])
-    hrsa_file = st.file_uploader("Upload HRSA Data File", type=["csv", "xlsx", "xls"])
+    cdc_file = st.file_uploader("Upload CDC Data File", type=["csv", "xlsx", "xls"], key="cdc_upload")
+    hrsa_file = st.file_uploader("Upload HRSA Data File", type=["csv", "xlsx", "xls"], key="hrsa_upload")
+    
+    # 自动保存数据
+    if cdc_file and hrsa_file:
+        st.info("💾 Data will be automatically saved for future use")
 
 # 加载数据
 cdc_data = pd.DataFrame()
@@ -187,15 +245,33 @@ merged_data = pd.DataFrame()
 mapped_cdc = pd.DataFrame()
 mapped_hrsa = pd.DataFrame()
 
-# 加载CDC数据
+# 优先使用预存数据
+use_saved_data = True  # 始终使用预存数据
+if use_saved_data and has_saved_data:
+    cdc_data, hrsa_data, load_success = load_preloaded_data()
+    if not load_success:
+        st.warning("⚠️ Failed to load pre-loaded data. Please upload new files.")
+
+# 如果用户上传了新文件，使用新文件
 if cdc_file:
     cdc_file_type = 'csv' if cdc_file.name.endswith('.csv') else 'excel'
-    cdc_data = load_data(cdc_file, cdc_file_type)
+    temp_cdc = load_data(cdc_file, cdc_file_type)
+    if not temp_cdc.empty:
+        cdc_data = temp_cdc
 
-# 加载HRSA数据
 if hrsa_file:
     hrsa_file_type = 'csv' if hrsa_file.name.endswith('.csv') else 'excel'
-    hrsa_data = load_data(hrsa_file, hrsa_file_type)
+    temp_hrsa = load_data(hrsa_file, hrsa_file_type)
+    if not temp_hrsa.empty:
+        hrsa_data = temp_hrsa
+
+# 自动保存数据（如果用户上传了新文件）
+if cdc_file and hrsa_file:
+    success, message = save_preloaded_data(cdc_data, hrsa_data)
+    if success:
+        st.success("✅ Data saved successfully for future use!")
+    else:
+        st.error(f"❌ Failed to save data: {message}")
 
 # 清理并映射数据
 mapped_cdc = clean_and_map_cdc_data(cdc_data)
