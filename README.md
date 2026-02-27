@@ -21,12 +21,14 @@ A regionally focused, equity-centered FemTech Business Intelligence platform for
 - **Opportunity Index**: Calculated as (State_Total_Births / Max_State_Births) * State_Average_HPSA_Score
 - **AI-Powered Insights**: Based on actual uploaded data
 - **Data Download**: Merged dataset and state-level summaries
+- **Automatic Data Storage**: Data is automatically saved to `preloaded_data` directory for future use
 
 ### 🔧 Technical Highlights
 - **Smart Data Processing**: Automatic field mapping, state name standardization, and data type conversion
 - **Efficient Data Fusion**: Merges CDC and HRSA data at state level (no county analysis)
 - **Responsive Design**: Optimized for desktop and tablet viewing
 - **Error Handling**: Robust file upload and data processing error management
+- **Persistent Data Storage**: Automatically saves uploaded data to `preloaded_data` directory for future use
 
 ## Tech Stack
 
@@ -85,16 +87,16 @@ Access at: `http://localhost:8501`
 ## Usage Notes
 
 1. **Data Upload**: Upload both CDC and HRSA files for full functionality
-2. **State Filter**: Select specific states or all six Deep South states
-3. **Form Access**: Complete the form on the Home page to unlock the dashboard
-4. **Chart Interactivity**: Hover over charts for detailed information
-5. **Data Download**: Export merged data and state summaries from the Download Center
+2. **Automatic Data Storage**: Data is automatically saved to `preloaded_data` directory and will be used for future sessions
+3. **State Filter**: Select specific states or all six Deep South states
+4. **Form Access**: Complete the form on the Home page to unlock the dashboard
+5. **Chart Interactivity**: Hover over charts for detailed information
+6. **Data Download**: Export merged data and state summaries from the Download Center
 
 ## Limitations
 
 - **Testing Only**: Data upload is for internal testing (production will auto-load CDC/HRSA data)
 - **Simulated AI**: AI Insights uses data-driven responses (real GPT integration planned)
-- **Session-Based**: No persistent data storage (data lost when session ends)
 - **Form Access**: No user authentication (form-based access control only)
 
 ## License
